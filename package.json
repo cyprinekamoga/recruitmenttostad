@@ -1,0 +1,32 @@
+{
+  "name": "recruitment-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted recruitment portal: job listings, applications with CV upload and reference requests, with applicant data encrypted at rest.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "generate-key": "node scripts/generate-key.js",
+    "create-admin": "node scripts/create-admin.js",
+    "test": "node --test --test-concurrency=1"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "argon2": "^0.45.1",
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.1.0",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
+  }
+}

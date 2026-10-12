@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Hiring dashboard</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap wide">
+      <span class="brand"><span data-company></span> · Hiring</span>
+      <nav class="admin-nav" id="nav" aria-label="Admin" hidden>
+        <button type="button" data-route="applications">Applications</button>
+        <button type="button" data-route="jobs">Jobs</button>
+        <button type="button" data-route="activity">Activity</button>
+        <button type="button" data-route="account">Account</button>
+        <button type="button" id="logout">Sign out</button>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap wide">
+    <div id="view" aria-live="polite"><p class="muted">Loading…</p></div>
+  </main>
+  <script src="/js/common.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+# Applicant data, CVs and the database live here. Never commit it.
+data/
+.env
+*.db
+*.db-wal
+*.db-shm
+*.log
