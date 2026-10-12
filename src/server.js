@@ -9,8 +9,7 @@ process.umask(0o077);
 const envFile = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
-const { loadConfig, ConfigError } = require('./config');
-const { openDatabase } = require('./db');
+const { loadConfig, webRootProblem, ConfigError } = require('./config');
 const { createCryptoBox } = require('./crypto');
 const { createFileStore } = require('./files');
 const { createMailer } = require('./mailer');
@@ -26,6 +25,22 @@ try {
     process.exit(1);
   }
   throw error;
+}
+
+const layoutProblem = webRootProblem([path.join(__dirname, '..'), config.dataDir]);
+if (layoutProblem && config.isProduction) {
+  console.error(`Refusing to start: ${layoutProblem}`);
+  process.exit(1);
+} else if (layoutProblem) {
+  console.warn(`WARNING: ${layoutProblem}`);
+}
+
+let openDatabase;
+try {
+  ({ openDatabase } = require('./db'));
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
 }
 
 const db = openDatabase(config.dbFile);
@@ -49,9 +64,11 @@ maintenance();
 const timer = setInterval(maintenance, 60 * 60 * 1000);
 timer.unref();
 
-const server = app.listen(config.port, config.host, () => {
-  console.log(`Recruitment portal listening on http://${config.host}:${config.port} (public URL ${config.publicBaseUrl})`);
-});
+const onListening = () => {
+  const where = typeof config.port === 'number' ? `http://${config.host}:${config.port}` : config.port;
+  console.log(`Recruitment portal listening on ${where} (public URL ${config.publicBaseUrl})`);
+};
+const server = typeof config.port === 'number' ? app.listen(config.port, config.host, onListening) : app.listen(config.port, onListening);
 server.headersTimeout = 60 * 1000;
 server.requestTimeout = 120 * 1000;
 

@@ -1,9 +1,16 @@
 'use strict';
 
-const argon2 = require('argon2');
+const crypto = require('node:crypto');
+const { promisify } = require('node:util');
 
-// OWASP-recommended argon2id parameters (19 MiB memory, 2 iterations).
-const HASH_OPTIONS = { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 };
+const scrypt = promisify(crypto.scrypt);
+
+// scrypt is built into Node.js, so there is no compiled add-on to install on the
+// server. These are OWASP-recommended parameters (32 MiB of memory per hash),
+// chosen to stay light enough for shared hosting.
+const PARAMS = { N: 2 ** 15, r: 8, p: 3 };
+const KEY_LENGTH = 32;
+const MAX_MEMORY = 128 * 1024 * 1024;
 
 const MIN_LENGTH = 12;
 const MAX_LENGTH = 256;
@@ -17,8 +24,23 @@ function passwordProblem(password) {
   return null;
 }
 
-function hashPassword(password) {
-  return argon2.hash(password, HASH_OPTIONS);
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const key = await scrypt(password.normalize('NFC'), salt, KEY_LENGTH, { ...PARAMS, maxmem: MAX_MEMORY });
+  return ['scrypt', PARAMS.N, PARAMS.r, PARAMS.p, salt.toString('base64'), key.toString('base64')].join('$');
+}
+
+async function checkHash(storedHash, password) {
+  const [scheme, N, r, p, salt, key] = String(storedHash).split('$');
+  if (scheme !== 'scrypt' || !salt || !key) return false;
+  const expected = Buffer.from(key, 'base64');
+  const actual = await scrypt(password.normalize('NFC'), Buffer.from(salt, 'base64'), expected.length, {
+    N: Number(N),
+    r: Number(r),
+    p: Number(p),
+    maxmem: MAX_MEMORY,
+  });
+  return crypto.timingSafeEqual(actual, expected);
 }
 
 let dummyHash;
@@ -31,11 +53,11 @@ async function verifyPassword(storedHash, password) {
   if (typeof password !== 'string' || password.length > MAX_LENGTH) return false;
   if (!storedHash) {
     dummyHash ??= await hashPassword('dummy-password-for-timing-equalisation');
-    await argon2.verify(dummyHash, password);
+    await checkHash(dummyHash, password);
     return false;
   }
   try {
-    return await argon2.verify(storedHash, password);
+    return await checkHash(storedHash, password);
   } catch {
     return false;
   }

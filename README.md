@@ -13,7 +13,7 @@ It is built so that applicants' personal information stays private:
 
 ## Quick start (on your computer)
 
-You need [Node.js](https://nodejs.org) 22 or newer.
+You need [Node.js](https://nodejs.org) 22.13 or newer. There is nothing to compile: the app uses Node's built-in SQLite and scrypt, so it also installs on shared hosting.
 
 ```bash
 npm install
@@ -49,7 +49,9 @@ Add more admins, or reset a lost password or authenticator, by running `npm run 
 
 ## Deploying
 
-The portal must be served over **HTTPS**; it refuses to start in production with an `http://` address. Two common setups:
+**Putting it on a subdomain of your existing website (e.g. `careers.yourcompany.com`) with cPanel, Plesk or similar shared hosting:** follow the step-by-step [HOSTING.md](HOSTING.md).
+
+Whichever way you host it, the portal must be served over **HTTPS**; it refuses to start in production with an `http://` address. On your own server, two common setups:
 
 **A. A small Linux server (VPS) with Caddy** (Caddy gets HTTPS certificates automatically):
 
@@ -105,7 +107,7 @@ Without email, everything still works: you copy the reference link and send it y
 | Applicant details, answers, referees | One AES-256-GCM encrypted record per application |
 | CVs and cover letters | Encrypted files with random names in `uploads/`, never inside the web folder |
 | Original file names, admin notes, references, authenticator secrets | Encrypted |
-| Admin passwords | argon2id hashes |
+| Admin passwords | Salted scrypt hashes (OWASP-recommended settings) |
 | Session and reference-link tokens | SHA-256 hashes only, so a stolen database can't be used to sign in or open links |
 | Repeat-applicant detection | Keyed HMAC of the email address, not the address itself |
 
@@ -156,7 +158,7 @@ Known limitations: the encryption key can't yet be rotated without a migration s
 ## Development
 
 ```bash
-npm test     # 50+ tests covering access control, encryption at rest, uploads, CSRF, sessions, references, retention
+npm test     # 55 tests covering access control, encryption at rest, uploads, CSRF, sessions, references, retention
 npm run dev  # restarts on file changes
 ```
 

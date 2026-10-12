@@ -126,3 +126,57 @@ describe('retention and clean-up', () => {
     }
   });
 });
+
+describe('passwords', () => {
+  const { hashPassword, verifyPassword } = require('../src/security/passwords');
+
+  test('uses salted scrypt and verifies correctly', async () => {
+    const first = await hashPassword('correct horse battery staple');
+    const second = await hashPassword('correct horse battery staple');
+    assert.match(first, /^scrypt\$32768\$8\$3\$/);
+    assert.notEqual(first, second, 'each hash has its own salt');
+    assert.equal(await verifyPassword(first, 'correct horse battery staple'), true);
+    assert.equal(await verifyPassword(first, 'correct horse battery stapler'), false);
+    assert.equal(await verifyPassword(null, 'anything at all'), false);
+    assert.equal(await verifyPassword('garbage', 'anything at all'), false);
+  });
+});
+
+describe('shared hosting', () => {
+  const os = require('node:os');
+  const { webRootProblem } = require('../src/config');
+  const key = crypto.randomBytes(32).toString('base64');
+
+  test('refuses to keep the app or its data inside public_html', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-'));
+    try {
+      fs.mkdirSync(path.join(home, 'public_html', 'careers'), { recursive: true });
+      fs.mkdirSync(path.join(home, 'recruitment'));
+      assert.match(webRootProblem([path.join(home, 'public_html', 'careers')]), /public folder/);
+      assert.match(webRootProblem([path.join(home, 'recruitment'), path.join(home, 'public_html', 'careers', 'data')]), /public_html/);
+      // cPanel's ~/www is a symlink to public_html.
+      fs.symlinkSync(path.join(home, 'public_html'), path.join(home, 'www'));
+      assert.match(webRootProblem([path.join(home, 'www', 'careers')]), /public_html/);
+      assert.equal(webRootProblem([path.join(home, 'recruitment'), path.join(home, 'recruitment', 'data')]), null);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test('accepts a socket path as PORT (Passenger / LiteSpeed)', () => {
+    assert.equal(loadConfig({ DATA_ENCRYPTION_KEY: key, PORT: '/tmp/passenger.sock' }).port, '/tmp/passenger.sock');
+    assert.equal(loadConfig({ DATA_ENCRYPTION_KEY: key, PORT: '8080' }).port, 8080);
+    assert.throws(() => loadConfig({ DATA_ENCRYPTION_KEY: key, PORT: '70000' }), ConfigError);
+  });
+
+  test('the data folder carries a deny-all .htaccess', () => {
+    const ctx = setup();
+    try {
+      const htaccess = fs.readFileSync(path.join(ctx.config.dataDir, '.htaccess'), 'utf8');
+      assert.match(htaccess, /Require all denied/);
+      assert.match(htaccess, /Deny from all/);
+    } finally {
+      ctx.cleanup();
+    }
+  });
+});

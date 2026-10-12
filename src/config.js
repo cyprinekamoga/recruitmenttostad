@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 class ConfigError extends Error {}
@@ -22,6 +23,43 @@ function boolFrom(env, name, fallback) {
   throw new ConfigError(`${name} must be true or false`);
 }
 
+// Hosting panels (Passenger on cPanel/Plesk, LiteSpeed) may give the app a
+// socket path instead of a port number; pass that through unchanged.
+function portFrom(raw) {
+  if (raw === undefined || raw === '') return 3000;
+  if (!/^\d+$/.test(raw)) return raw;
+  const port = Number(raw);
+  if (port < 1 || port > 65535) throw new ConfigError('PORT must be between 1 and 65535');
+  return port;
+}
+
+const WEB_ROOT_FOLDERS = new Set(['public_html', 'htdocs']);
+
+function realPathOfNearestExisting(dir) {
+  let current = path.resolve(dir);
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return path.join(fs.realpathSync(current), path.relative(current, path.resolve(dir)));
+}
+
+/**
+ * The app folder holds the secret key (.env) and the data folder holds the
+ * database and CVs. If either sits inside a public web folder, the web server
+ * could hand them to anyone, so refuse that layout.
+ */
+function webRootProblem(dirs) {
+  for (const dir of dirs) {
+    const real = realPathOfNearestExisting(dir);
+    if (real.split(path.sep).some((part) => WEB_ROOT_FOLDERS.has(part.toLowerCase()))) {
+      return `${real} is inside your website's public folder, so visitors could download the secret key or applicant data. Move the app (and DATA_DIR) to a folder outside public_html, e.g. /home/<your-user>/recruitment.`;
+    }
+  }
+  return null;
+}
+
 function trustProxyFrom(raw) {
   if (raw === undefined || raw === '' || /^(0|false|no|off)$/i.test(raw)) return false;
   if (/^\d+$/.test(raw)) return Number(raw);
@@ -38,7 +76,7 @@ function trustProxyFrom(raw) {
 function loadConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV || 'development';
   const isProduction = nodeEnv === 'production';
-  const port = intFrom(env, 'PORT', 3000, { min: 1, max: 65535 });
+  const port = portFrom(env.PORT);
 
   const encryptionKey = env.DATA_ENCRYPTION_KEY;
   if (!encryptionKey) {
@@ -48,7 +86,7 @@ function loadConfig(env = process.env) {
     throw new ConfigError('DATA_ENCRYPTION_KEY must be 32 random bytes encoded as base64 (use `npm run generate-key`).');
   }
 
-  let publicBaseUrl = env.PUBLIC_BASE_URL || (isProduction ? '' : `http://localhost:${port}`);
+  let publicBaseUrl = env.PUBLIC_BASE_URL || (isProduction ? '' : `http://localhost:${typeof port === 'number' ? port : 3000}`);
   if (!publicBaseUrl) throw new ConfigError('PUBLIC_BASE_URL is required in production, e.g. https://jobs.example.com');
   let parsedBase;
   try {
@@ -108,4 +146,4 @@ function loadConfig(env = process.env) {
   });
 }
 
-module.exports = { loadConfig, ConfigError };
+module.exports = { loadConfig, webRootProblem, ConfigError };

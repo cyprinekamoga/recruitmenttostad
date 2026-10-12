@@ -2,7 +2,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const Database = require('better-sqlite3');
+
+let DatabaseSync;
+try {
+  // Built into Node.js 22.13+, so no compiled add-on is needed (important on shared hosting).
+  ({ DatabaseSync } = require('node:sqlite'));
+} catch {
+  throw new Error(`Node.js 22.13 or newer is required (this server runs ${process.version}). Choose a newer Node.js version in your hosting control panel.`);
+}
 
 // Each entry runs once, in order. Never edit a shipped migration; append a new one.
 const MIGRATIONS = [
@@ -109,8 +116,94 @@ function migrate(db) {
   }
 }
 
+/**
+ * A small wrapper giving node:sqlite the few conveniences the app uses
+ * (transactions, pragmas and single-column results).
+ */
+class Database {
+  constructor(file) {
+    this.raw = new DatabaseSync(file);
+  }
+
+  prepare(sql) {
+    return new Statement(this.raw.prepare(sql));
+  }
+
+  exec(sql) {
+    this.raw.exec(sql);
+  }
+
+  pragma(text, { simple = false } = {}) {
+    const rows = this.raw.prepare(`PRAGMA ${text}`).all();
+    return simple ? (rows[0] ? Object.values(rows[0])[0] : undefined) : rows;
+  }
+
+  /** Wraps fn so that it runs atomically: all of its writes happen, or none do. */
+  transaction(fn) {
+    return (...args) => {
+      this.raw.exec('BEGIN IMMEDIATE');
+      try {
+        const result = fn(...args);
+        this.raw.exec('COMMIT');
+        return result;
+      } catch (error) {
+        this.raw.exec('ROLLBACK');
+        throw error;
+      }
+    };
+  }
+
+  close() {
+    this.raw.close();
+  }
+}
+
+class Statement {
+  constructor(statement) {
+    this.statement = statement;
+    this.firstColumnOnly = false;
+  }
+
+  /** Return only the first column's value instead of whole rows. */
+  pluck() {
+    this.firstColumnOnly = true;
+    return this;
+  }
+
+  run(...params) {
+    return this.statement.run(...params);
+  }
+
+  get(...params) {
+    const row = this.statement.get(...params);
+    return this.firstColumnOnly && row ? Object.values(row)[0] : row;
+  }
+
+  all(...params) {
+    const rows = this.statement.all(...params);
+    return this.firstColumnOnly ? rows.map((row) => Object.values(row)[0]) : rows;
+  }
+}
+
+// Safety net: if the data folder ever ends up inside a public web folder,
+// Apache/LiteSpeed will still refuse to serve it.
+const DENY_ALL_HTACCESS = `# Applicant data. This folder must never be served by a web server.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order deny,allow
+  Deny from all
+</IfModule>
+`;
+
 function openDatabase(file) {
-  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  if (file !== ':memory:') {
+    const dir = path.dirname(file);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const htaccess = path.join(dir, '.htaccess');
+    if (!fs.existsSync(htaccess)) fs.writeFileSync(htaccess, DENY_ALL_HTACCESS, { mode: 0o644 });
+  }
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
