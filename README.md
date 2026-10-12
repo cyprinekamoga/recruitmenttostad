@@ -45,11 +45,12 @@ In the dashboard, open **Jobs → New job**, add a title, description and any qu
 | See who accessed what | Activity |
 | Change your password | Account |
 
-Add more admins, or reset a lost password or authenticator, by running `npm run create-admin` on the server.
+The first admin account can be created in the browser at `/setup` when the `SETUP_CODE` setting is present. That page switches itself off once an admin exists. Add more admins, or reset a lost password or authenticator, by running `npm run create-admin` on the server.
 
 ## Deploying
 
-**Putting it on a subdomain of your existing website (e.g. `careers.yourcompany.com`) with cPanel, Plesk or similar shared hosting:** follow the step-by-step [HOSTING.md](HOSTING.md).
+- **On a subdomain of your website (e.g. `careers.yourcompany.com`), with no server to manage:** follow [HOSTING.md](HOSTING.md). It runs the portal on Render, straight from this GitHub repository (`render.yaml` is ready), and points the subdomain at it from your domain company (written for one.com). Everything, including creating your admin account, is done in the browser.
+- **On cPanel/Plesk shared hosting that has "Setup Node.js App":** follow [docs/hosting-cpanel.md](docs/hosting-cpanel.md).
 
 Whichever way you host it, the portal must be served over **HTTPS**; it refuses to start in production with an `http://` address. On your own server, two common setups:
 
@@ -126,6 +127,7 @@ Each encrypted value is bound to its own record, so ciphertext can't be swapped 
 - Error messages and response times are the same for a wrong username, password or code.
 - Sessions use an `HttpOnly`, `SameSite=Strict`, `Secure`, `__Host-` cookie and expire after 60 idle minutes or 8 hours. Every change requires a CSRF token.
 - Changing your password signs out all your other devices.
+- The optional first-run page `/setup` needs the `SETUP_CODE` that only your hosting dashboard shows. It creates the account only after a correct authenticator code, and switches off for good once an admin exists, so it can't be used to add accounts or take over the portal.
 
 ### Uploads
 - Only PDF and Word `.docx` are accepted. The type is checked from the file's actual contents; the name and browser-reported type are ignored.
@@ -158,7 +160,7 @@ Known limitations: the encryption key can't yet be rotated without a migration s
 ## Development
 
 ```bash
-npm test     # 55 tests covering access control, encryption at rest, uploads, CSRF, sessions, references, retention
+npm test     # 63 tests covering access control, encryption at rest, uploads, CSRF, sessions, references, retention
 npm run dev  # restarts on file changes
 ```
 
@@ -176,8 +178,10 @@ src/
   routes/public.js   job listings and applications
   routes/references.js  referee lookup and submission
   routes/admin.js    dashboard API
+  routes/setup.js    one-time browser setup of the first admin
   security/          passwords, sessions, TOTP, auth/CSRF/rate-limit middleware
 public/              careers site, application form, referee form, dashboard (plain HTML/CSS/JS)
 scripts/             generate-key, create-admin
+render.yaml          Render Blueprint (see HOSTING.md)
 test/                automated tests
 ```

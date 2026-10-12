@@ -21,7 +21,7 @@ function deriveKey(master, purpose) {
  */
 function createCryptoBox(masterKeyBase64) {
   const master = Buffer.from(masterKeyBase64, 'base64');
-  if (master.length !== 32) throw new Error('Encryption key must be 32 bytes');
+  if (master.length < 32) throw new Error('Encryption key must be at least 32 bytes');
   const encryptionKey = deriveKey(master, 'encryption');
   const indexKey = deriveKey(master, 'blind-index');
   master.fill(0);

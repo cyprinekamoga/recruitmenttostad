@@ -1,190 +1,128 @@
-# Hosting on a subdomain of your website
+# Putting the portal online at careers.yourcompany.com
 
-This guide puts the recruitment portal at an address like **`https://careers.yourcompany.com`**, on the same web hosting account as your main website. Your main site isn't touched. Afterwards you just add a "Careers" link to it.
+This guide is for a domain and website hosted at **one.com**, but the steps work with any domain company.
 
-> Replace `yourcompany.com` with your domain, and `USER` with your hosting account's username, everywhere below.
+> Replace `yourcompany.com` with your real domain everywhere below.
 
-**Time needed:** about 30–45 minutes.
+## How it fits together
+
+```
+yourcompany.com           → your website, stays at one.com (nothing changes)
+careers.yourcompany.com   → the recruitment portal, running on Render
+GitHub                    → stores the portal's code; Render updates the site from it
+```
+
+**Why not one.com, or GitHub Pages?** Both can only show fixed pages. The portal is an application: it receives applications, stores CVs securely and runs your dashboard, so it needs a host that runs programs. one.com's standard web hosting doesn't, and GitHub Pages is public-only.
+
+[Render](https://render.com) runs it directly from your GitHub repository. Expect about **US$7–8 a month**: the "Starter" service plus a small 1 GB disk. Check [Render's pricing](https://render.com/pricing) for current prices. The free plan is **not** suitable: it has no disk, so every application and CV would be wiped whenever it restarts.
+
+**You'll need:** your GitHub login, a payment card, access to your one.com Control Panel, and your phone (for the sign-in app). About **30 minutes**, plus up to a few hours of waiting for the subdomain to start working.
 
 ---
 
-## 0. Check that your host can run it
+## Part 1: Create the site on Render (about 10 minutes)
 
-Log in to your hosting control panel (usually **cPanel**) and look under **Software** for **Setup Node.js App**.
+1. Go to **[render.com](https://render.com)** → **Get Started** → **GitHub**, and sign in with your GitHub account.
+2. When GitHub asks which repositories Render may access, choose **Only select repositories**, pick **recruitmenttostad**, and click **Install / Authorize**.
+3. In the Render dashboard, click **New +** → **Blueprint**, select the **recruitmenttostad** repository and click **Connect**. Render reads the settings already prepared in the `render.yaml` file.
+4. Give the Blueprint a name (e.g. `careers`) and fill in the three values it asks for:
 
-- **It's there:** continue with this guide.
-- **It's not there:** your plan can't run this kind of app. Many WordPress-only hosts, website builders (Wix, Squarespace) and the cheapest shared plans can't. You can still use a subdomain: run the portal on a small server or platform and point `careers.yourcompany.com` at it (see [the end of this guide](#if-your-host-cant-run-nodejs)).
+   | Setting | What to enter |
+   | --- | --- |
+   | `COMPANY_NAME` | Your company's name, as applicants should see it |
+   | `PRIVACY_CONTACT_EMAIL` | The address applicants can write to about their data, e.g. `privacy@yourcompany.com` |
+   | `PUBLIC_BASE_URL` | `https://careers.yourcompany.com` |
 
-When you create the app in step 4, the Node.js version list must include **22** (22.13 or newer). If the highest is 20 or lower, ask your host to enable Node.js 22.
+5. Click **Apply** (or **Deploy Blueprint**). Add your card when asked.
+6. Open the new **recruitment-portal** service. After 3–5 minutes its status changes to **Live**. Near the top you'll see its Render address, like `https://recruitment-portal-xxxx.onrender.com`. Keep this page open.
 
-You also need the **Terminal** (cPanel → Advanced → Terminal) or SSH access, to run two short commands. If you don't have it, ask your host to enable it.
+## Part 2: Save the secret key (2 minutes, important)
 
-## 1. Create the subdomain
+Render created two random secrets for you. Open the service's **Environment** tab:
 
-cPanel → **Domains** → **Domains** → **Create A New Domain**
-(older cPanel: **Subdomains**)
+- **`DATA_ENCRYPTION_KEY`**: reveal it and copy it into a password manager or another safe place. This key encrypts all applicant data. **If it is lost, the data can never be read again.** Never send it by email or chat.
+- **`SETUP_CODE`**: you need this in Part 3.
 
-- Domain: `careers.yourcompany.com`
-- **Untick "Share document root"** so it gets its own folder, e.g. `/home/USER/careers.yourcompany.com`
-- Click **Submit**
+## Part 3: Create your admin account (5 minutes, all in the browser)
 
-**If your domain's DNS is managed somewhere else** (Cloudflare, your registrar, etc.), add a DNS record there:
+1. Open `https://recruitment-portal-xxxx.onrender.com/setup` (your Render address with `/setup` on the end).
+2. Paste the **SETUP_CODE**, choose a username and a password (at least 12 characters; a few random words work well, e.g. `lamp river orange pocket`), and click **Next**.
+3. On your phone, install **Google Authenticator** or **Microsoft Authenticator** if you don't have one. In the app, tap **+** and **scan the QR code** on the screen.
+4. Type the 6-digit code the app shows and click **Finish setup**.
 
-| Type | Name | Value |
-| --- | --- | --- |
-| A | `careers` | your hosting account's IP address (cPanel home page → *General Information* → *Shared IP Address*) |
+You're now in the dashboard. The setup page switches itself off for good once your account exists.
 
-On Cloudflare, set the SSL/TLS mode to **Full (strict)**.
+From now on you sign in at `/admin` with your **username + password + the code from your phone**.
 
-## 2. Turn on HTTPS for the subdomain
+## Part 4: Connect careers.yourcompany.com (10 minutes + waiting)
 
-cPanel → **Security** → **SSL/TLS Status** → tick `careers.yourcompany.com` → **Run AutoSSL**.
+**In Render:**
 
-Wait until it shows a valid certificate (a green padlock). This can take a few minutes, longer if you just changed DNS. **The portal will not start without HTTPS:** applicant data must never be sent unencrypted.
+1. Open the service → **Settings** → **Custom Domains** → **+ Add Custom Domain**.
+2. Enter `careers.yourcompany.com` and save. Render then shows what to point it to: a **CNAME** with a value like `recruitment-portal-xxxx.onrender.com`. Copy that value.
 
-## 3. Upload the app (outside `public_html`!)
+**In one.com** ([one.com's own guide](https://help.one.com/hc/en-us/articles/360000803517-How-do-I-create-a-CNAME-record)):
 
-The app folder will hold the secret key and the applicants' data, so it must **not** be inside `public_html` or the subdomain's folder. Put it here:
+3. Log in to the **one.com Control Panel** and, if you have more than one, choose your domain.
+4. Click the **Advanced settings** tile → **DNS settings** → **DNS records**.
+5. Under *Create new record*, choose **CNAME** and enter:
+   - **Hostname:** `careers`
+   - **Is an alias of:** the value Render showed, e.g. `recruitment-portal-xxxx.onrender.com`
+   - **TTL:** leave empty
+6. Click **Create record**.
 
-```
-/home/USER/recruitment          ← the app (create this folder)
-/home/USER/public_html          ← your main website (leave alone)
-/home/USER/careers.yourcompany.com   ← the subdomain's folder (leave empty)
-```
+**Back in Render:**
 
-The app refuses to start if it finds itself inside `public_html`.
+7. Click **Verify** next to the domain. It can take from a few minutes to a few hours before it turns green. Render then sets up the secure padlock (HTTPS) automatically.
+8. Open **https://careers.yourcompany.com**. 🎉
 
-**Option A, from GitHub (easiest to update later):** cPanel → **Files** → **Git™ Version Control** → **Create**
-- Clone URL: your repository's URL. For a private repository, cPanel first needs an SSH key added to GitHub as a *deploy key*; if that's a hassle, use Option B.
-- Repository Path: `recruitment`
+## Part 5: Final checks (5 minutes)
 
-**Option B, upload a zip:** on GitHub, click **Code → Download ZIP**. In cPanel → **File Manager**, create the folder `recruitment` in your home folder (not in `public_html`), upload the zip there, then **Extract** it. Make sure files like `package.json` and the `src` folder end up directly inside `recruitment`, not in a sub-folder.
-
-## 4. Create the Node.js application
-
-cPanel → **Software** → **Setup Node.js App** → **Create Application**
-
-| Setting | Value |
-| --- | --- |
-| Node.js version | **22.x** (22.13 or newer) |
-| Application mode | **Production** |
-| Application root | `recruitment` |
-| Application URL | `careers.yourcompany.com` |
-| Application startup file | `src/server.js` |
-
-Click **Create**. Then, on the same page, click **Run NPM Install** and wait for it to finish.
-
-The app will show an error page for now. That's expected until it is configured in the next step.
-
-## 5. Configure it (secret key and settings)
-
-At the top of the Setup Node.js App page there is a command starting with `source /home/USER/nodevenv/...`. Copy it. Open cPanel → **Terminal**, paste it, and press Enter. Then run:
-
-```bash
-cp .env.example .env
-chmod 600 .env
-npm run generate-key
-```
-
-The last command prints a line like `DATA_ENCRYPTION_KEY=AbC123...`. **Save this line in your password manager now.** If it is ever lost, the stored applications can't be recovered.
-
-Now open `/home/USER/recruitment/.env` in cPanel **File Manager** (right-click → **Edit**; turn on *Settings → Show Hidden Files* if you can't see it) and set:
-
-```ini
-DATA_ENCRYPTION_KEY=AbC123...
-PUBLIC_BASE_URL=https://careers.yourcompany.com
-NODE_ENV=production
-COMPANY_NAME=Your Company Ltd
-PRIVACY_CONTACT_EMAIL=privacy@yourcompany.com
-TRUST_PROXY=1
-```
-
-Leave the other settings as they are. `PORT` and `HOST` are overridden by cPanel automatically. Save the file.
-
-> Alternatively, enter these values as **Environment variables** on the Setup Node.js App page. Either way works; don't do both with different values.
-
-## 6. Create your admin account
-
-In the same Terminal window:
-
-```bash
-npm run create-admin
-```
-
-Choose a username and a long password (at least 12 characters; a few random words work well). It then shows a **setup key**. On your phone, open an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, …), choose **Add account → Enter a setup key**, and type it in. Then type `clear` to wipe the key from the screen.
-
-## 7. Start it and test
-
-On the Setup Node.js App page, click **Restart**. Then:
-
-1. Open **https://careers.yourcompany.com**. You should see the careers page ("no open positions" for now).
-2. Open **https://careers.yourcompany.com/admin** and sign in with your username, password and the 6-digit code from your phone.
-3. Go to **Jobs → New job**, create a test job, and make sure it is open.
-4. In a private/incognito window, apply to it with a test PDF.
-5. Back in the dashboard, check that the application appears and the CV downloads. Then delete the test application and the test job.
-6. **Safety check:** visit `https://careers.yourcompany.com/.env` and `https://careers.yourcompany.com/data/recruitment.db`. Both must show "Page not found".
-
-## 8. Link it from your main website
-
-Add a **Careers** (or "Work with us") link in your main website's menu pointing to `https://careers.yourcompany.com`.
-
-Each job also has its own link (shown under **Jobs** in the dashboard) that you can share on social media or job boards.
+1. **Test the whole flow.** Sign in at `https://careers.yourcompany.com/admin` → **Jobs** → **New job**, and create a test job. In a private/incognito window, apply to it with any PDF. Check that the application shows up in the dashboard and the CV downloads, then delete both.
+2. **Check the security setting for visitor addresses.** Open **Activity** in the dashboard and look at the *IP address* of your own sign-in. Then search the web for "what is my IP".
+   - If they match, everything is set correctly.
+   - If the dashboard shows something like `10.x.x.x`, tell me, so I can adjust the setting that tells applicants apart.
+3. **Safety check:** `https://careers.yourcompany.com/.env` must show "Page not found".
+4. **Link it from your website.** In your one.com website editor (or WordPress menu), add a **Careers** menu item linking to `https://careers.yourcompany.com`. Each job also has its own link (under **Jobs** in the dashboard) that you can share on social media or job boards.
 
 ---
 
 ## Optional: email
 
-Email lets you send reference requests straight from the dashboard and get a notification when someone applies. Create a mailbox like `careers@yourcompany.com` in cPanel → **Email Accounts**, then add to `.env`:
+This lets you send reference requests straight from the dashboard and get a notification when someone applies. Create a mailbox like `careers@yourcompany.com` in one.com. Then in Render → **Environment** → **Add Environment Variable**, add:
 
-```ini
-SMTP_HOST=mail.yourcompany.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=careers@yourcompany.com
-SMTP_PASS=the-mailbox-password
-MAIL_FROM="Your Company Careers <careers@yourcompany.com>"
-NOTIFY_EMAIL=you@yourcompany.com
-```
+| Key | Value |
+| --- | --- |
+| `SMTP_HOST` | `send.one.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_SECURE` | `true` |
+| `SMTP_USER` | `careers@yourcompany.com` |
+| `SMTP_PASS` | that mailbox's password |
+| `MAIL_FROM` | `Your Company Careers <careers@yourcompany.com>` |
+| `NOTIFY_EMAIL` | where you want new-application alerts, e.g. your own address |
 
-Restart the app afterwards. Notification emails never contain applicant details, only that something new is waiting in the dashboard.
+Click **Save Changes**; Render restarts the site by itself. Alert emails never contain applicant details, only that something new is waiting in the dashboard. Without email, everything still works: you copy each reference link and send it yourself.
 
-## Backups
+## Everyday running
 
-- Your host's normal account backups include the `recruitment/data` folder. Its contents are encrypted, so a backup on its own reveals nothing.
-- Keep the `DATA_ENCRYPTION_KEY` line in your password manager, **not** in the same place as backups.
-- To keep your own copy: File Manager → `recruitment` → right-click `data` → **Compress**, then download the zip. Delete the zip from the server afterwards.
-
-## Updating the app later
-
-- **Git:** cPanel → Git Version Control → **Manage** → **Pull or Deploy** → **Update from Remote**.
-- **Zip:** upload the new files over the old ones. Never delete `.env` or the `data` folder.
-
-Then click **Run NPM Install** and **Restart** on the Setup Node.js App page.
+- **Updates:** when the code on GitHub changes, Render rebuilds the site automatically, and the data on its disk is kept. Expect a few seconds of downtime during each update.
+- **Backups:** the data lives on the service's **Disk** (see the *Disks* section of the service for snapshots). Its contents are encrypted, so a copy on its own reveals nothing. Keep `DATA_ENCRYPTION_KEY` safe and separate.
+- **Who can see the data:** the encryption protects the data if the disk or a backup is copied. Because the key is stored in Render's settings, it doesn't hide the data from Render itself. The same is true at any hosting company. The data is stored in Render's **Frankfurt (EU)** region.
+- **Don't delete the Render service:** deleting it deletes the disk and every application with it.
 
 ## Troubleshooting
 
-Error messages are written to `stderr.log` in the `recruitment` folder (open it with File Manager).
-
-| Message or symptom | What to do |
+| Problem | What to do |
 | --- | --- |
-| `Refusing to start: ... inside your website's public folder` | The app is inside `public_html`. Move the folder to `/home/USER/recruitment` and update **Application root**. |
-| `PUBLIC_BASE_URL must use https://` | Use `https://` in `.env`, and make sure step 2 (AutoSSL) succeeded. |
-| `DATA_ENCRYPTION_KEY is not set` | `.env` is missing or not in the `recruitment` folder; repeat step 5. |
-| `Node.js 22.13 or newer is required` | Choose Node.js 22 on the Setup Node.js App page, then **Run NPM Install** and **Restart**. |
-| `ExperimentalWarning: SQLite is an experimental feature` | Harmless. This is Node.js's built-in database, which the app uses so that nothing needs compiling on your host. |
-| Everyone gets "Too many requests" at once | Make sure `TRUST_PROXY=1` is in `.env`, then restart. |
-| "Sign-in failed" with the right password | Check your phone's clock is set automatically; the 6-digit codes depend on the time. After 5 failures, wait 15 minutes. |
-| Lost your phone or password | Run `npm run create-admin` again in Terminal with the same username to reset both. |
+| Deploy fails or the service won't start | Open the service's **Logs** tab: the app writes a plain-English explanation of what's wrong. Send it to me if it isn't clear. |
+| `PUBLIC_BASE_URL must use https://` | In **Environment**, make sure the value starts with `https://`. |
+| The setup page says "Browser setup is off" | `SETUP_CODE` is missing from **Environment**. Add one with a long random value, save, and reload. |
+| "Sign-in failed" with the right password | Make sure your phone sets its clock automatically; the codes depend on the time. After 5 failed attempts, wait 15 minutes. |
+| Lost your phone | In Render, open the service's **Shell** tab and run `npm run create-admin` with your username. It resets your password and gives you a new code for your new phone. |
+| `careers.yourcompany.com` doesn't open yet | DNS changes can take a few hours. Double-check the CNAME in one.com: hostname `careers`, pointing to the exact value Render showed. |
+| Applicants see "Too many requests" | Tell me: the visitor-address setting needs adjusting (see Part 5, step 2). |
 
-## Other control panels
+## Other ways to host
 
-- **Plesk:** Websites & Domains → **Add Subdomain** → open it → **Node.js**. Set *Application Root* to the app folder, *Document Root* to its `public` folder, *Application Startup File* to `src/server.js`, and *Application Mode* to production. Click **NPM install**, create `.env` as in step 5, then **Restart App**. Enable **Let's Encrypt** for the subdomain.
-- **DirectAdmin:** if your host offers **Setup Node.js App**, the steps match the cPanel ones above.
-- **Hostinger (hPanel) and others:** look for a *Node.js* section. Its fields have similar names. The essentials are always: Node.js 22, startup file `src/server.js`, app folder outside the public web folder, HTTPS on, and the `.env` settings from step 5.
-
-## If your host can't run Node.js
-
-You can still use `careers.yourcompany.com`. Run the portal elsewhere and point the subdomain at it with one DNS record:
-
-- **A small Linux server** (e.g. DigitalOcean or Hetzner, ~$5/month): follow "Deploying → A" in the README, then add an **A** record `careers` → the server's IP address.
-- **A managed platform** such as Render: deploy the repository with a persistent disk for `DATA_DIR`, add `careers.yourcompany.com` as a custom domain in the platform, then add the **CNAME** record it gives you.
+- Shared hosting with a "Setup Node.js App" tool (cPanel, Plesk): see [docs/hosting-cpanel.md](docs/hosting-cpanel.md).
+- Your own Linux server or Docker: see "Deploying" in the [README](README.md).

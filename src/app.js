@@ -10,6 +10,7 @@ const { noStore, createRateLimiters } = require('./security/middleware');
 const { publicRoutes } = require('./routes/public');
 const { referenceRoutes } = require('./routes/references');
 const { adminRoutes } = require('./routes/admin');
+const { setupRoutes } = require('./routes/setup');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -84,6 +85,11 @@ function createApp({ config, db, cryptoBox, fileStore, mailer, logger = console 
     res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
     next();
   });
+  // Liveness check for the hosting platform: not logged and not rate limited.
+  app.get('/healthz', (req, res) => {
+    db.prepare('SELECT 1').get();
+    res.set('Cache-Control', 'no-store').type('text/plain').send('ok');
+  });
   app.use(requestLogger(logger));
   app.use(cookieParser());
 
@@ -92,12 +98,13 @@ function createApp({ config, db, cryptoBox, fileStore, mailer, logger = console 
 
   app.use('/api', noStore, express.json({ limit: '100kb' }));
   app.use('/api/admin', adminRoutes(deps));
+  app.use('/api/setup', limiters.adminApi, setupRoutes(deps));
   app.use('/api/references', limiters.reference, referenceRoutes(deps));
   app.use('/api', limiters.publicApi, publicRoutes(deps));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Private pages: keep them out of search engines and browser caches.
-  app.use(['/admin', '/reference'], noStore, (req, res, next) => {
+  app.use(['/admin', '/reference', '/setup'], noStore, (req, res, next) => {
     res.set('X-Robots-Tag', 'noindex, nofollow');
     next();
   });

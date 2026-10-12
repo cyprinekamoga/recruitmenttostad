@@ -82,11 +82,21 @@ function loadConfig(env = process.env) {
   if (!encryptionKey) {
     throw new ConfigError('DATA_ENCRYPTION_KEY is not set. Generate one with `npm run generate-key` and keep a secure backup of it.');
   }
-  if (Buffer.from(encryptionKey, 'base64').length !== 32) {
-    throw new ConfigError('DATA_ENCRYPTION_KEY must be 32 random bytes encoded as base64 (use `npm run generate-key`).');
+  // At least 256 random bits, base64-encoded: what `npm run generate-key` and
+  // hosting platforms' "generate value" features produce.
+  if (!/^[A-Za-z0-9+/_-]{43,}={0,2}$/.test(encryptionKey) || Buffer.from(encryptionKey, 'base64').length < 32) {
+    throw new ConfigError('DATA_ENCRYPTION_KEY must be at least 32 random bytes encoded as base64 (use `npm run generate-key`).');
   }
 
-  let publicBaseUrl = env.PUBLIC_BASE_URL || (isProduction ? '' : `http://localhost:${typeof port === 'number' ? port : 3000}`);
+  const setupCode = env.SETUP_CODE || '';
+  if (setupCode && setupCode.length < 20) {
+    throw new ConfigError('SETUP_CODE must be at least 20 characters long (or leave it empty to turn browser setup off).');
+  }
+
+  // RENDER_EXTERNAL_URL is set automatically on Render, so the app works on its
+  // onrender.com address before a custom domain is connected.
+  let publicBaseUrl =
+    env.PUBLIC_BASE_URL || env.RENDER_EXTERNAL_URL || (isProduction ? '' : `http://localhost:${typeof port === 'number' ? port : 3000}`);
   if (!publicBaseUrl) throw new ConfigError('PUBLIC_BASE_URL is required in production, e.g. https://jobs.example.com');
   let parsedBase;
   try {
@@ -116,6 +126,7 @@ function loadConfig(env = process.env) {
     dbFile: path.join(dataDir, 'recruitment.db'),
     uploadDir: path.join(dataDir, 'uploads'),
     encryptionKey,
+    setupCode,
     companyName: env.COMPANY_NAME || 'Our Company',
     privacyContactEmail: env.PRIVACY_CONTACT_EMAIL || '',
     retentionDays: intFrom(env, 'RETENTION_DAYS', 180, { min: 0, max: 3650 }),

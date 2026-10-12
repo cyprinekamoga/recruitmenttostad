@@ -9,11 +9,17 @@ function totpAad(adminId) {
   return `admin-totp:${adminId}`;
 }
 
+class AdminExistsError extends Error {}
+
 /**
  * Creates an admin, or resets the password (and 2FA secret) of an existing one.
- * Returns the new TOTP secret when two-factor authentication is enabled.
+ * Returns the TOTP secret when two-factor authentication is enabled.
+ *
+ * `totpSecret` lets the caller supply a secret the user has already confirmed
+ * in their authenticator app. With `onlyIfNoAdmins`, the account is created only
+ * if no admin exists yet (checked atomically), which the browser setup relies on.
  */
-async function upsertAdmin(db, cryptoBox, { username, password, enableTotp = true }) {
+async function upsertAdmin(db, cryptoBox, { username, password, enableTotp = true, totpSecret: givenSecret, onlyIfNoAdmins = false }) {
   if (!USERNAME_PATTERN.test(username || '')) {
     throw new Error('Username must be 3-64 characters: letters, numbers, dot, dash, underscore or @.');
   }
@@ -21,12 +27,15 @@ async function upsertAdmin(db, cryptoBox, { username, password, enableTotp = tru
   if (problem) throw new Error(problem);
 
   const passwordHash = await hashPassword(password);
-  const totpSecret = enableTotp ? generateSecret() : null;
+  const totpSecret = enableTotp ? givenSecret || generateSecret() : null;
 
   let created = false;
+  let id;
   db.transaction(() => {
+    if (onlyIfNoAdmins && db.prepare('SELECT 1 FROM admins LIMIT 1').get()) {
+      throw new AdminExistsError('An admin account already exists.');
+    }
     const existing = db.prepare('SELECT id FROM admins WHERE username = ?').get(username);
-    let id;
     created = !existing;
     if (existing) {
       id = existing.id;
@@ -43,7 +52,7 @@ async function upsertAdmin(db, cryptoBox, { username, password, enableTotp = tru
     db.prepare('UPDATE admins SET totp_secret_enc = ? WHERE id = ?').run(totpEnc, id);
   })();
 
-  return { totpSecret, created };
+  return { id, totpSecret, created };
 }
 
-module.exports = { upsertAdmin, totpAad, USERNAME_PATTERN };
+module.exports = { upsertAdmin, totpAad, AdminExistsError, USERNAME_PATTERN };

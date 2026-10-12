@@ -50,7 +50,13 @@ const mailer = createMailer(config);
 const app = createApp({ config, db, cryptoBox, fileStore, mailer });
 
 const adminCount = db.prepare('SELECT COUNT(*) AS n FROM admins').get().n;
-if (adminCount === 0) console.warn('No admin account exists yet. Create one with `npm run create-admin`.');
+if (adminCount === 0) {
+  console.warn(
+    config.setupCode
+      ? `No admin account exists yet. Open ${config.publicBaseUrl}/setup to create one.`
+      : 'No admin account exists yet. Create one with `npm run create-admin`, or set SETUP_CODE and open /setup.'
+  );
+}
 if (!config.isProduction) console.warn('Running in development mode. Set NODE_ENV=production when deploying.');
 
 const maintenance = () => {

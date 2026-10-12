@@ -75,6 +75,11 @@
     });
     render(form);
     username.focus();
+    api('/api/setup/status')
+      .then(({ state }) => {
+        if (state === 'ready') status.replaceChildren(alertBox('info', 'No admin account exists yet.'), h('p', null, h('a', { class: 'btn', href: '/setup' }, 'Run first-time setup')));
+      })
+      .catch(() => {});
   }
 
   // ---- Routing ---------------------------------------------------------------
